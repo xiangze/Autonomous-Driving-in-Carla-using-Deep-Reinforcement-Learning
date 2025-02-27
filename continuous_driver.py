@@ -12,6 +12,7 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 from encoder_init import EncodeState
 from networks.on_policy.ppo.agent import PPOAgent
+from networks.on_policy.grpo.agent import GRPOAgent
 from simulation.connection import ClientConnection
 from simulation.environment import CarlaEnvironment
 from parameters import *
@@ -20,7 +21,7 @@ from parameters import *
 def parse_args():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp-name', type=str, help='name of the experiment')
+    parser.add_argument('--exp-name', type=str, help='name of the experiment(algorithm)')
     parser.add_argument('--env-name', type=str, default='carla', help='name of the simulation environment')
     parser.add_argument('--learning-rate', type=float, default=PPO_LEARNING_RATE, help='learning rate of the optimizer')
     parser.add_argument('--seed', type=int, default=SEED, help='seed of the experiment')
@@ -43,6 +44,14 @@ def boolean_string(s):
     return s == 'True'
 
 
+def getAgent(algo:str,town, action_std_init):
+    if(algo is "ppo"):
+        return PPOAgent(town, action_std_init)    
+    elif(algo is "grpo"):
+        return GRPOAgent(town, action_std_init)    
+    else:
+        print(f"algorithm {algo} is not implemented")
+        sys.exit() 
 
 def runner():
 
@@ -61,6 +70,8 @@ def runner():
     try:
         if exp_name == 'ppo':
             run_name = "PPO"
+        elif exp_name == 'grpo':
+            run_name = "GRPO"
         else:
             """
             
@@ -121,26 +132,27 @@ def runner():
     #========================================================================
     try:
         time.sleep(0.5)
-        
+    #    if exp_name == 'ppo':
         if checkpoint_load:
-            chkt_file_nums = len(next(os.walk(f'checkpoints/PPO/{town}'))[2]) - 1
-            chkpt_file = f'checkpoints/PPO/{town}/checkpoint_ppo_'+str(chkt_file_nums)+'.pickle'
+            chkt_file_nums = len(next(os.walk(f'checkpoints/{run_name}/{town}'))[2]) - 1
+            chkpt_file = f'checkpoints/{run_name}/{town}/checkpoint_{exp_name}_'+str(chkt_file_nums)+'.pickle'
             with open(chkpt_file, 'rb') as f:
                 data = pickle.load(f)
                 episode = data['episode']
                 timestep = data['timestep']
                 cumulative_score = data['cumulative_score']
                 action_std_init = data['action_std_init']
-            agent = PPOAgent(town, action_std_init)
+            agent = getAgent(exp_name,town, action_std_init)
             agent.load()
         else:
             if train == False:
-                agent = PPOAgent(town, action_std_init)
+                agent = getAgent(exp_name,town, action_std_init)
                 agent.load()
                 for params in agent.old_policy.actor.parameters():
                     params.requires_grad = False
             else:
-                agent = PPOAgent(town, action_std_init)
+                agent = getAgent(exp_name,town, action_std_init)
+    
         if train:
             #Training
             while timestep < total_timesteps:
@@ -198,10 +210,10 @@ def runner():
                 if episode % 10 == 0:
                     agent.learn()
                     agent.chkpt_save()
-                    chkt_file_nums = len(next(os.walk(f'checkpoints/PPO/{town}'))[2])
+                    chkt_file_nums = len(next(os.walk(f'checkpoints/{run_name}/{town}'))[2])
                     if chkt_file_nums != 0:
                         chkt_file_nums -=1
-                    chkpt_file = f'checkpoints/PPO/{town}/checkpoint_ppo_'+str(chkt_file_nums)+'.pickle'
+                    chkpt_file = f'checkpoints/{run_name}/{town}/checkpoint_{exp_name}_'+str(chkt_file_nums)+'.pickle'
                     data_obj = {'cumulative_score': cumulative_score, 'episode': episode, 'timestep': timestep, 'action_std_init': action_std_init}
                     with open(chkpt_file, 'wb') as handle:
                         pickle.dump(data_obj, handle)
@@ -228,8 +240,8 @@ def runner():
                 if episode % 100 == 0:
                     
                     agent.save()
-                    chkt_file_nums = len(next(os.walk(f'checkpoints/PPO/{town}'))[2])
-                    chkpt_file = f'checkpoints/PPO/{town}/checkpoint_ppo_'+str(chkt_file_nums)+'.pickle'
+                    chkt_file_nums = len(next(os.walk(f'checkpoints/{run_name}/{town}'))[2])
+                    chkpt_file = f'checkpoints/{run_name}/{town}/checkpoint_{exp_name}_'+str(chkt_file_nums)+'.pickle'
                     data_obj = {'cumulative_score': cumulative_score, 'episode': episode, 'timestep': timestep, 'action_std_init': action_std_init}
                     with open(chkpt_file, 'wb') as handle:
                         pickle.dump(data_obj, handle)
