@@ -27,7 +27,7 @@ class Buffer:
         del self.dones[:]
 
 class GRPOAgent(object):
-    def __init__(self, town, action_std_init=0.4):
+    def __init__(self, town, action_std_init=0.4, ref_policy=None):
         #self.env = env
         self.obs_dim = 100
         self.action_dim = 2
@@ -52,7 +52,7 @@ class GRPOAgent(object):
         self.old_policy = PolicyNet(self.obs_dim, self.action_dim, self.action_std)
         self.old_policy.load_state_dict(self.policy.state_dict())
         self.MseLoss = nn.MSELoss()
-
+        self.ref_policy=ref_policy
 
     def get_action(self, obs, train):
 
@@ -138,6 +138,10 @@ class GRPOAgent(object):
                     new_log_probs = torch.log(new_policy_probs)[chosen_actions[t]]
                     ratio = torch.exp(new_log_probs - log_probs[t])
                     trajectory_loss += -self.clip(ratio)* advantage
+                    if(self.ref_policy is not None):#kl_penalty
+                        prob_ref= torch.nn.functional.softmax(self.ref_policy(torch.from_numpy(observations[t]).float()), dim=0)
+                        ref_ratio=prob_ref/new_policy_probs
+                        trajectory_loss-=self.beta* ref_ratio - torch.log(ref_ratio) - 1                    
                 trajectory_loss /= len(observations)
                 loss += trajectory_loss
             loss /= len(trajs)
